@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced LTE Frequency Tool</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #334155;
+            --border: #e2e8f0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .container {
+            background-color: var(--card);
+            width: 100%;
+            max-width: 500px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        /* TABS */
+        .tabs {
+            display: flex;
+            background-color: #f1f5f9;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: 600;
+            color: #64748b;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            background-color: var(--card);
+            color: var(--primary);
+            border-bottom: 3px solid var(--primary);
+        }
+
+        .content {
+            padding: 25px;
+        }
+
+        /* FORM ELEMENTS */
+        .form-group { margin-bottom: 20px; }
+        
+        label { 
+            display: block; 
+            margin-bottom: 8px; 
+            font-weight: 600; 
+            font-size: 0.9em; 
+            color: #475569; 
+        }
+
+        select, input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+            background-color: #fff;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+
+        .range-hint {
+            font-size: 0.85em;
+            color: #64748b;
+            margin-top: 6px;
+            background: #f8fafc;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px dashed #cbd5e1;
+        }
+
+        button.calc-btn {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button.calc-btn:hover { background-color: #1d4ed8; }
+
+        /* RESULTS TABLE */
+        .result-box {
+            margin-top: 25px;
+            display: none; /* Hidden by default */
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .result-row:last-child { border-bottom: none; }
+        
+        .res-label { color: #64748b; font-size: 0.9em; }
+        .res-val { font-weight: 700; color: #0f172a; }
+
+        .tag {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .tag-fdd { background-color: #dbeafe; color: #1e40af; }
+        .tag-tdd { background-color: #dcfce7; color: #166534; }
+        .tag-sdl { background-color: #ffedd5; color: #9a3412; }
+        .tag-err { background-color: #fee2e2; color: #991b1b; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="tabs">
+        <div class="tab active" id="tab-dl" onclick="switchTab('DL')">Scenario 1: Input DL</div>
+        <div class="tab" id="tab-ul" onclick="switchTab('UL')">Scenario 2: Input UL</div>
+    </div>
+
+    <div class="content">
+        
+        <!-- Band Selector -->
+        <div class="form-group">
+            <label>Step 1: Select LTE Band</label>
+            <select id="bandSelect" onchange="updateRangeHint()"></select>
+            <div id="rangeHint" class="range-hint">Select a band to see valid range</div>
+        </div>
+
+        <!-- EARFCN Input -->
+        <div class="form-group">
+            <label id="inputLabel">Step 2: Input DL EARFCN</label>
+            <input type="number" id="earfcnInput" placeholder="Enter number..." onkeydown="if(event.key==='Enter') calculate()">
+        </div>
+
+        <button class="calc-btn" onclick="calculate()">Step 3: Calculate</button>
+
+        <!-- Results -->
+        <div id="resultBox" class="result-box">
+            <!-- Content injected via JS -->
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // --- DATABASE ---
+    // Mode: FDD, TDD, SDL (Supplementary Downlink), SUL (Supplementary Uplink)
+    // Limits: Standard 3GPP limits. 
+    // If a band is SDL (Downlink only), set ul_low/n_ul to null.
+    const lteBands = [
+        { b: 1,  mode: 'FDD', dl_low: 2110, n_dl: 0,    max_dl: 599,   ul_low: 1920, n_ul: 18000, max_ul: 18599 },
+        { b: 2,  mode: 'FDD', dl_low: 1930, n_dl: 600,  max_dl: 1199,  ul_low: 1850, n_ul: 18600, max_ul: 19199 },
+        { b: 3,  mode: 'FDD', dl_low: 1805, n_dl: 1200, max_dl: 1949,  ul_low: 1710, n_ul: 19200, max_ul: 19949 },
+        { b: 4,  mode: 'FDD', dl_low: 2110, n_dl: 1950, max_dl: 2399,  ul_low: 1710, n_ul: 19950, max_ul: 20399 },
+        { b: 5,  mode: 'FDD', dl_low: 869,  n_dl: 2400, max_dl: 2649,  ul_low: 824,  n_ul: 20400, max_ul: 20649 },
+        { b: 7,  mode: 'FDD', dl_low: 2620, n_dl: 2750, max_dl: 3449,  ul_low: 2500, n_ul: 20750, max_ul: 21449 },
+        { b: 8,  mode: 'FDD', dl_low: 925,  n_dl: 3450, max_dl: 3799,  ul_low: 880,  n_ul: 21450, max_ul: 21799 },
+        { b: 12, mode: 'FDD', dl_low: 729,  n_dl: 5010, max_dl: 5179,  ul_low: 699,  n_ul: 23010, max_ul: 23179 },
+        { b: 13, mode: 'FDD', dl_low: 746,  n_dl: 5180, max_dl: 5279,  ul_low: 777,  n_ul: 23180, max_ul: 23279 },
+        { b: 20, mode: 'FDD', dl_low: 791,  n_dl: 6150, max_dl: 6449,  ul_low: 832,  n_ul: 24150, max_ul: 24449 },
+        { b: 28, mode: 'FDD', dl_low: 758,  n_dl: 9210, max_dl: 9659,  ul_low: 703,  n_ul: 27210, max_ul: 27659 },
+        { b: 29, mode: 'SDL', dl_low: 717,  n_dl: 9660, max_dl: 9769,  ul_low: null, n_ul: null,  max_ul: null  }, 
+        { b: 32, mode: 'SDL', dl_low: 1452, n_dl: 9920, max_dl: 10359, ul_low: null, n_ul: null,  max_ul: null  },
+        // TDD Bands: Frequency is the same for UL and DL. Usually handled as one range.
+        { b: 38, mode: 'TDD', dl_low: 2570, n_dl: 37750, max_dl: 38249, ul_low: 2570, n_ul: 37750, max_ul: 38249 },
+        { b: 39, mode: 'TDD', dl_low: 1880, n_dl: 38250, max_dl: 38649, ul_low: 1880, n_ul: 38250, max_ul: 38649 },
+        { b: 40, mode: 'TDD', dl_low: 2300, n_dl: 38650, max_dl: 39649, ul_low: 2300, n_ul: 38650, max_ul: 39649 },
+        { b: 41, mode: 'TDD', dl_low: 2496, n_dl: 39650, max_dl: 41589, ul_low: 2496, n_ul: 39650, max_ul: 41589 },
+        { b: 66, mode: 'FDD', dl_low: 2110, n_dl: 66436, max_dl: 67335, ul_low: 1710, n_ul: 131972,max_ul: 132671},
+        { b: 71, mode: 'FDD', dl_low: 617,  n_dl: 68586, max_dl: 68935, ul_low: 663,  n_ul: 133122,max_ul: 133471}
+    ];
+
+    let currentMode = 'DL'; // 'DL' or 'UL'
+
+    // --- INITIALIZATION ---
+    window.onload = function() {
+        const select = document.getElementById('bandSelect');
+        lteBands.forEach(band => {
+            let opt = document.createElement('option');
+            opt.value = band.b;
+            opt.text = `Band ${band.b} (${band.mode})`;
+            select.appendChild(opt);
+        });
+        updateRangeHint();
+    }
+
+    // --- LOGIC ---
+    function switchTab(mode) {
+        currentMode = mode;
+        
+        // Update UI Tabs
+        document.getElementById('tab-dl').className = mode === 'DL' ? 'tab active' : 'tab';
+        document.getElementById('tab-ul').className = mode === 'UL' ? 'tab active' : 'tab';
+        
+        // Update Labels
+        document.getElementById('inputLabel').innerText = `Step 2: Input ${mode} EARFCN`;
+        
+        // Clear result
+        document.getElementById('resultBox').style.display = 'none';
+        
+        updateRangeHint();
+    }
+
+    function updateRangeHint() {
+        const bandId = parseInt(document.getElementById('bandSelect').value);
+        const band = lteBands.find(b => b.b === bandId);
+        const hintBox = document.getElementById('rangeHint');
+        const input = document.getElementById('earfcnInput');
+
+        input.value = ''; // Clear input on band change
+
+        if (currentMode === 'DL') {
+            hintBox.innerText = `Valid DL EARFCN Range: ${band.n_dl} - ${band.max_dl}`;
+            hintBox.style.color = '#64748b';
+            input.disabled = false;
+        } else {
+            // UL Mode logic
+            if (band.mode === 'SDL') {
+                hintBox.innerText = `Band ${band.b} is SDL (Downlink Only). No Uplink available.`;
+                hintBox.style.color = '#dc2626'; // Red warning
+                input.disabled = true;
+            } else {
+                hintBox.innerText = `Valid UL EARFCN Range: ${band.n_ul} - ${band.max_ul}`;
+                hintBox.style.color = '#64748b';
+                input.disabled = false;
+            }
+        }
+    }
+
+    function calculate() {
+        const bandId = parseInt(document.getElementById('bandSelect').value);
+        const band = lteBands.find(b => b.b === bandId);
+        const inputVal = document.getElementById('earfcnInput').value;
+        const resBox = document.getElementById('resultBox');
+
+        if(inputVal === "") {
+            alert("Please enter a value.");
+            return;
+        }
+
+        const earfcn = parseFloat(inputVal);
+        let isValid = false;
+        
+        let dl_earfcn_res, ul_earfcn_res, dl_freq_res, ul_freq_res;
+
+        // SCENARIO 1: Input was DL
+        if (currentMode === 'DL') {
+            // Check Range
+            if (earfcn >= band.n_dl && earfcn <= band.max_dl) {
+                isValid = true;
+                dl_earfcn_res = earfcn;
+                
+                // Calc DL Freq
+                dl_freq_res = band.dl_low + 0.1 * (earfcn - band.n_dl);
+                
+                // Calc UL details
+                if (band.mode === 'SDL') {
+                    ul_earfcn_res = "N/A";
+                    ul_freq_res = "N/A";
+                } else if (band.mode === 'TDD') {
+                    ul_earfcn_res = earfcn; // Same for TDD
+                    ul_freq_res = dl_freq_res; // Same for TDD
+                } else {
+                    // FDD: Calculate UL based on offset relationship
+                    // N_ul = N_dl + (Offset_UL - Offset_DL)
+                    ul_earfcn_res = earfcn + (band.n_ul - band.n_dl);
+                    ul_freq_res = band.ul_low + 0.1 * (ul_earfcn_res - band.n_ul);
+                }
+            }
+        } 
+        // SCENARIO 2: Input was UL
+        else {
+            if (band.mode === 'SDL') {
+                alert("This band does not support Uplink.");
+                return;
+            }
+            
+            // Check Range
+            if (earfcn >= band.n_ul && earfcn <= band.max_ul) {
+                isValid = true;
+                ul_earfcn_res = earfcn;
+
+                // Calc UL Freq
+                ul_freq_res = band.ul_low + 0.1 * (earfcn - band.n_ul);
+
+                // Calc DL details
+                if (band.mode === 'TDD') {
+                    dl_earfcn_res = earfcn;
+                    dl_freq_res = ul_freq_res;
+                } else {
+                    // FDD: Calculate DL based on offset relationship reversed
+                    // N_dl = N_ul - (Offset_UL - Offset_DL)
+                    dl_earfcn_res = earfcn - (band.n_ul - band.n_dl);
+                    dl_freq_res = band.dl_low + 0.1 * (dl_earfcn_res - band.n_dl);
+                }
+            }
+        }
+
+        resBox.style.display = 'block';
+
+        if (!isValid) {
+            resBox.innerHTML = `
+                <div class="result-row">
+                    <div style="color:red; font-weight:bold; width:100%; text-align:center;">
+                        Error: EARFCN ${earfcn} is outside the valid range for Band ${band.b} ${currentMode}.
+                    </div>
+                </div>`;
+            return;
+        }
+
+        // Determine Tag Color
+        let tagClass = 'tag-fdd';
+        if(band.mode === 'TDD') tagClass = 'tag-tdd';
+        if(band.mode === 'SDL') tagClass = 'tag-sdl';
+
+        // Render Results
+        resBox.innerHTML = `
+            <div class="result-row">
+                <span class="res-label">Mode</span>
+                <span class="tag ${tagClass}">${band.mode}</span>
+            </div>
+            <div class="result-row">
+                <span class="res-label">DL EARFCN</span>
+                <span class="res-val">${dl_earfcn_res}</span>
+            </div>
+            <div class="result-row">
+                <span class="res-label">UL EARFCN</span>
+                <span class="res-val">${ul_earfcn_res}</span>
+            </div>
+            <div class="result-row">
+                <span class="res-label">DL Frequency</span>
+                <span class="res-val" style="color:var(--primary)">${typeof dl_freq_res === 'number' ? dl_freq_res.toFixed(1) + ' MHz' : dl_freq_res}</span>
+            </div>
+            <div class="result-row">
+                <span class="res-label">UL Frequency</span>
+                <span class="res-val" style="color:var(--primary)">${typeof ul_freq_res === 'number' ? ul_freq_res.toFixed(1) + ' MHz' : ul_freq_res}</span>
+            </div>
+        `;
+    }
+</script>
+
+</body>
+</html>
