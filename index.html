@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Advanced LTE Frequency Tool</title>
     <style>
+		/* 新增：最頂端版本列樣式 */
+		.version-bar {
+			background-color: #f1f5f9; /* 淺灰色背景 */
+			padding: 6px 15px;
+			font-size: 0.75em;
+			color: #64748b;
+			border-bottom: 1px solid var(--border);
+			display: flex;
+			justify-content: flex-end; /* 靠右對齊，你也可以改為 center */
+			font-weight: 500;
+		}
         :root {
             --primary: #2563eb;
             --bg: #f8fafc;
@@ -149,6 +160,7 @@
 <body>
 
 <div class="container">
+	<div class="version-bar">Version 1.2</div>
     <div class="tabs">
         <div class="tab active" id="tab-dl" onclick="switchTab('DL')">Scenario 1: Input DL</div>
         <div class="tab" id="tab-ul" onclick="switchTab('UL')">Scenario 2: Input UL</div>
